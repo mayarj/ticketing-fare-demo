@@ -25,7 +25,7 @@ public sealed class ModificationRequest
     /// Additional parameters for the modification (e.g., {"numberOfBags": 2}).
     /// Shape depends on the modification rule.
     /// </summary>
-    public Dictionary<string, object>? Parameters { get; set; }
+    // public Dictionary<string, object>? Parameters { get; set; }
 
     /// <summary>
     /// Validates that the request is well-formed.
