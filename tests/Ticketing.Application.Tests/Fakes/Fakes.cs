@@ -66,15 +66,20 @@ public sealed class FakeModificationRuleRepository : IModificationRuleRepository
 public sealed class FakeTicketRepository : ITicketRepository
 {
     private readonly HashSet<string> _existing;
+    private readonly List<string>? _journal;
 
-    public FakeTicketRepository(IEnumerable<string>? existingNumbers = null) =>
+    public FakeTicketRepository(IEnumerable<string>? existingNumbers = null, List<string>? journal = null)
+    {
         _existing = new HashSet<string>(existingNumbers ?? Array.Empty<string>(), StringComparer.Ordinal);
+        _journal = journal;
+    }
 
     public Ticket? Added { get; private set; }
 
     public Task AddAsync(Ticket ticket, CancellationToken ct = default)
     {
         Added = ticket;
+        _journal?.Add("add");
         return Task.CompletedTask;
     }
 
@@ -82,18 +87,34 @@ public sealed class FakeTicketRepository : ITicketRepository
         Task.FromResult(_existing.Contains(number));
 }
 
-/// <summary>Records how the transaction methods were invoked.</summary>
+/// <summary>Records how the transaction methods were invoked (counts + ordered journal).</summary>
 public sealed class FakeUnitOfWork : IUnitOfWork
 {
+    private readonly List<string>? _journal;
+
+    public FakeUnitOfWork(List<string>? journal = null) => _journal = journal;
+
+    /// <summary>When true, <see cref="SaveChangesAsync"/> throws to exercise the rollback path.</summary>
+    public bool ThrowOnSave { get; init; }
+
     public int BeginCount { get; private set; }
     public int CommitCount { get; private set; }
     public int RollbackCount { get; private set; }
     public int SaveCount { get; private set; }
 
-    public Task BeginTransactionAsync(CancellationToken ct = default) { BeginCount++; return Task.CompletedTask; }
-    public Task CommitTransactionAsync(CancellationToken ct = default) { CommitCount++; return Task.CompletedTask; }
-    public Task RollbackTransactionAsync(CancellationToken ct = default) { RollbackCount++; return Task.CompletedTask; }
-    public Task<int> SaveChangesAsync(CancellationToken ct = default) { SaveCount++; return Task.FromResult(1); }
+    public Task BeginTransactionAsync(CancellationToken ct = default) { BeginCount++; _journal?.Add("begin"); return Task.CompletedTask; }
+    public Task CommitTransactionAsync(CancellationToken ct = default) { CommitCount++; _journal?.Add("commit"); return Task.CompletedTask; }
+    public Task RollbackTransactionAsync(CancellationToken ct = default) { RollbackCount++; _journal?.Add("rollback"); return Task.CompletedTask; }
+
+    public Task<int> SaveChangesAsync(CancellationToken ct = default)
+    {
+        SaveCount++;
+        _journal?.Add("save");
+        if (ThrowOnSave)
+            throw new InvalidOperationException("Simulated save failure.");
+        return Task.FromResult(1);
+    }
+
     public void Dispose() { }
 }
 
